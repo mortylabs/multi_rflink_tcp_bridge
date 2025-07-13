@@ -50,6 +50,7 @@ pip install -r requirements.txt
 python MultiRFLinkTCPBridge.py
 ```
 
+
 ## ⚙️ Configuration
 
 Create and customize a `.env` file in the project root. You can copy from a template:
@@ -85,6 +86,40 @@ python MultiRFLinkTCPBridge.py
 - Messages drained on new client connect to avoid stale payloads
 
 This bridge gives your automation system a unified, real-time view of your RF environment, regardless of how many RFLinks you deploy or where you place them.
+
+## 🚁 Remote Device Setup
+
+For each Raspberry Pi Zero W / 2 W with an RFLink USB device:
+
+1. **Install Python 3 and `rflinkproxy`**
+
+```bash
+sudo apt update
+pip3 install rflink
+```
+
+2. **Create a proxy systemctl service: **
+```bash
+sudo nano /etc/systemd/system/rflinkproxy.service
+[Unit]
+Description=RFLink Proxy Service
+After=network.target
+
+[Service]
+ExecStart=/home/pi/start-rflinkproxy.sh
+WorkingDirectory=/home/pi
+User=pi
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+```
+sudo systemctl daemon-reload
+sudo systemctl enable rflinkproxy
+sudo systemctl start rflinkproxy
+```
 
 ## 🏠 Integration Examples
 
@@ -139,5 +174,5 @@ Have feedback or need support?
 - Start a discussion on the repo
 - Suggest features or improvements via pull requests
 
-We’re happy to hear from contributors and users!
+
 
