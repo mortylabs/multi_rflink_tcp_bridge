@@ -114,6 +114,8 @@ class BridgeThread(threading.Thread):
             try:
                 logger.info(f"{self.__class__.__name__}: Starting on {self.ip}:{self.port}")
                 with socket.socket() as server_socket:
+                    # Fix 1: SO_REUSEADDR prevents "port already in use" on restart
+                    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     server_socket.bind((self.ip, self.port))
                     server_socket.listen(2)
                     logger.info(f"{self.__class__.__name__}: Listening for client...")
@@ -130,6 +132,7 @@ class BridgeThread(threading.Thread):
                             message_queue.task_done()
             except Exception:
                 log_error_and_notify(format_exception())
+                sleep(10)
 
 class RFLinkThread(threading.Thread):
     def __init__(self, ip, port):
@@ -142,6 +145,10 @@ class RFLinkThread(threading.Thread):
             try:
                 logger.debug(f"{self.__class__.__name__}: Connecting to {self.ip}:{self.port}")
                 with socket.socket() as client_socket:
+                    # Fix 2: SO_KEEPALIVE detects dead connections at the TCP level
+                    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    # Fix 3: 60 second timeout detects silent/stale connections
+                    client_socket.settimeout(60)
                     client_socket.connect((self.ip, self.port))
                     while True:
                         data = client_socket.recv(1024)
