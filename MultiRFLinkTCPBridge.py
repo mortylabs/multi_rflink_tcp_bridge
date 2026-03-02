@@ -108,6 +108,7 @@ class BridgeThread(threading.Thread):
         super().__init__()
         self.ip = ip
         self.port = port
+        self._reconnect_pending = False
 
     def run(self):
         while True:
@@ -120,6 +121,7 @@ class BridgeThread(threading.Thread):
                     server_socket.listen(2)
                     logger.info(f"{self.__class__.__name__}: Listening for client...")
                     conn, addr = server_socket.accept()
+                    self._reconnect_pending = False  # HA reconnected, cancel any pending alert
                     with conn:
                         logger.info(f"{self.__class__.__name__}: Incoming connection from {addr}")
                         while not message_queue.empty():
@@ -131,8 +133,14 @@ class BridgeThread(threading.Thread):
                             conn.sendall(item)
                             message_queue.task_done()
             except Exception:
-                log_error_and_notify(format_exception())
-                sleep(10)
+                err = format_exception()
+                logger.warning(f"{self.__class__.__name__}: Connection lost ({err}), waiting 60s to see if HA reconnects...")
+                self._reconnect_pending = True
+                self._reconnect_deadline = 60
+                sleep(60)
+                if self._reconnect_pending:
+                    log_error_and_notify(f"BridgeThread: HA did not reconnect within 60s — {err}")
+                    self._reconnect_pending = False
 
 class RFLinkThread(threading.Thread):
     def __init__(self, ip, port):
@@ -147,8 +155,6 @@ class RFLinkThread(threading.Thread):
                 with socket.socket() as client_socket:
                     # Fix 2: SO_KEEPALIVE detects dead connections at the TCP level
                     client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                    # Fix 3: 60 second timeout detects silent/stale connections
-                    client_socket.settimeout(60)
                     client_socket.connect((self.ip, self.port))
                     while True:
                         data = client_socket.recv(1024)
