@@ -121,7 +121,9 @@ class BridgeThread(threading.Thread):
                     server_socket.listen(2)
                     logger.info(f"{self.__class__.__name__}: Listening for client...")
                     conn, addr = server_socket.accept()
-                    self._reconnect_pending = False  # HA reconnected, cancel any pending alert
+                    if self._reconnect_pending:
+                        log_error_and_notify(f"BridgeThread: HA reconnected successfully from {addr} ✅")
+                    self._reconnect_pending = False
                     with conn:
                         logger.info(f"{self.__class__.__name__}: Incoming connection from {addr}")
                         while not message_queue.empty():
@@ -134,19 +136,40 @@ class BridgeThread(threading.Thread):
                             message_queue.task_done()
             except Exception:
                 err = format_exception()
-                logger.warning(f"{self.__class__.__name__}: Connection lost ({err}), waiting 60s to see if HA reconnects...")
+                logger.warning(f"{self.__class__.__name__}: Connection lost ({err}), starting 120s reconnect window...")
                 self._reconnect_pending = True
-                self._reconnect_deadline = 60
-                sleep(60)
-                if self._reconnect_pending:
-                    log_error_and_notify(f"BridgeThread: HA did not reconnect within 60s — {err}")
-                    self._reconnect_pending = False
+                def alert_if_no_reconnect(bridge, error):
+                    sleep(120)
+                    if bridge._reconnect_pending:
+                        log_error_and_notify(f"BridgeThread: HA did not reconnect within 120s — {error}")
+                        bridge._reconnect_pending = False
+                threading.Thread(target=alert_if_no_reconnect, args=(self, err), daemon=True).start()
 
 class RFLinkThread(threading.Thread):
     def __init__(self, ip, port):
         super().__init__()
         self.ip = ip
         self.port = int(port)
+        self._down = False
+        self._last_alert = 0
+        self._alert_interval = 7200  # 2 hours
+
+    def _handle_disconnect(self, reason):
+        now = __import__('time').time()
+        if not self._down:
+            # First disconnection — alert immediately
+            self._down = True
+            self._last_alert = now
+            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} disconnected — {reason}")
+        elif now - self._last_alert >= self._alert_interval:
+            # Still down — reminder every 2 hours
+            self._last_alert = now
+            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} still down — {reason}")
+
+    def _handle_reconnect(self):
+        if self._down:
+            self._down = False
+            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} reconnected successfully ✅")
 
     def run(self):
         while True:
@@ -156,6 +179,7 @@ class RFLinkThread(threading.Thread):
                     # Fix 2: SO_KEEPALIVE detects dead connections at the TCP level
                     client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                     client_socket.connect((self.ip, self.port))
+                    self._handle_reconnect()
                     while True:
                         data = client_socket.recv(1024)
                         if data:
@@ -165,11 +189,11 @@ class RFLinkThread(threading.Thread):
                                 logger.debug(f"{self.__class__.__name__}: Received: {data}")
                                 message_queue.put(data)
                         else:
-                            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} disconnected...")
+                            self._handle_disconnect("connection closed by host")
                             sleep(10)
                             break
             except Exception:
-                log_error_and_notify(format_exception())
+                self._handle_disconnect(format_exception())
                 sleep(10)
 
 if __name__ == "__main__":
