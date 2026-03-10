@@ -96,12 +96,23 @@ def log_error_and_notify(message):
     else:
         logger.error(message)
 
-    if telegram_enabled:
-        telegram_bot.sendMessage(telegram_chat_id, f"<b>{APP_NAME}</b>\n<i>{message}</i>", parse_mode="Html")
+    send_telegram_message(message)
 
 def send_telegram_message(message):
-    if telegram_enabled:
-        telegram_bot.sendMessage(telegram_chat_id, f"<b>{APP_NAME}</b>\n<i>{message}</i>", parse_mode="Html")
+    if not telegram_enabled:
+        return
+    for attempt in range(3):
+        try:
+            telegram_bot.sendMessage(telegram_chat_id, f"<b>{APP_NAME}</b>\n<i>{message}</i>", parse_mode="Html")
+            return
+        except telepot.exception.TooManyRequestsError as e:
+            retry_after = e.json.get('parameters', {}).get('retry_after', 10) if hasattr(e, 'json') else 10
+            logger.warning(f"Telegram rate limited, retrying after {retry_after}s")
+            sleep(retry_after)
+        except Exception:
+            logger.exception("Failed to send Telegram message")
+            return
+
 
 class BridgeThread(threading.Thread):
     def __init__(self, ip, port):
@@ -155,21 +166,29 @@ class RFLinkThread(threading.Thread):
         self._alert_interval = 7200  # 2 hours
 
     def _handle_disconnect(self, reason):
-        now = __import__('time').time()
         if not self._down:
-            # First disconnection — alert immediately
+            # First disconnection — start timer, only alert if still down after 120s
             self._down = True
-            self._last_alert = now
-            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} disconnected — {reason}")
-        elif now - self._last_alert >= self._alert_interval:
-            # Still down — reminder every 2 hours
-            self._last_alert = now
-            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} still down — {reason}")
+            logger.info(f"{self.__class__.__name__}: {self.ip} disconnected — {reason}, starting 120s reconnect window...")
+            def alert_if_no_reconnect(thread, r):
+                sleep(120)
+                if thread._down:
+                    thread._last_alert = __import__('time').time()
+                    log_error_and_notify(f"{thread.__class__.__name__}: {thread.ip} disconnected — {r}")
+            threading.Thread(target=alert_if_no_reconnect, args=(self, reason), daemon=True).start()
+        else:
+            now = __import__('time').time()
+            if now - self._last_alert >= self._alert_interval:
+                # Still down — reminder every 2 hours
+                self._last_alert = now
+                log_error_and_notify(f"{self.__class__.__name__}: {self.ip} still down — {reason}")
 
     def _handle_reconnect(self):
         if self._down:
             self._down = False
-            log_error_and_notify(f"{self.__class__.__name__}: {self.ip} reconnected successfully ✅")
+            if self._last_alert > 0:
+                # Only notify if disconnect alert was actually sent (i.e. down > 120s)
+                log_error_and_notify(f"{self.__class__.__name__}: {self.ip} reconnected successfully ✅")
 
     def run(self):
         while True:
@@ -209,3 +228,4 @@ if __name__ == "__main__":
     bridge_thread = BridgeThread(bridge_ip, bridge_port)
     bridge_thread.start()
     bridge_thread.join()
+    
