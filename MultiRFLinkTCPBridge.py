@@ -155,6 +155,7 @@ class BridgeThread(threading.Thread):
                         log_error_and_notify(f"BridgeThread: HA did not reconnect within 120s — {error}")
                         bridge._reconnect_pending = False
                 threading.Thread(target=alert_if_no_reconnect, args=(self, err), daemon=True).start()
+                sleep(10)
 
 class RFLinkThread(threading.Thread):
     def __init__(self, ip, port):
@@ -228,4 +229,3 @@ if __name__ == "__main__":
     bridge_thread = BridgeThread(bridge_ip, bridge_port)
     bridge_thread.start()
     bridge_thread.join()
-    
