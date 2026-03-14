@@ -42,12 +42,12 @@
 ## 🚀 Quickstart
 
 ```bash
-git clone https://github.com/mortylabs/MultiRFLinkTCPBridge.git
+git clone https://github.com/mortylabs/multi_rflink_tcp_bridge.git
 cd MultiRFLinkTCPBridge
 cp .env.example .env
 nano .env  # configure IPs, ports, and logging
 pip install -r requirements.txt
-python MultiRFLinkTCPBridge.py
+python multi_rflink_tcp_bridge.py
 ```
 
 
@@ -78,7 +78,7 @@ cp .env.example .env
 Once configured, simply run the script:
 
 ```bash
-python MultiRFLinkTCPBridge.py
+python multi_rflink_tcp_bridge.py
 ```
 - Starts listener threads for each RFLink
 - Forwards their messages into one bridge stream
