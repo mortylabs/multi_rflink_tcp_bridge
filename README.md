@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**MultiRFLinkTCPBridge** is a Python app that consolidates multiple RFLink streams (433MHz, 868MHz, etc.) from distributed devices, with their own IP addresses or ports, into a single TCP output - ready for Home Assistant or any automation hub.
+**multi_rflink_tcp_bridge.py** is a Python app that consolidates multiple RFLink streams (433MHz, 868MHz, etc.) from distributed devices, with their own IP addresses or ports, into a single TCP output - ready for Home Assistant or any automation hub.
 
 ---
 
@@ -21,6 +21,8 @@
 - [Quickstart](#quickstart)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [Running as a Service](#running-as-a-service)
+- [Remote Device Setup](#remote-device-setup)
 - [Integration Examples](#integration-examples)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -43,17 +45,18 @@
 
 ```bash
 git clone https://github.com/mortylabs/multi_rflink_tcp_bridge.git
-cd MultiRFLinkTCPBridge
+cd multi_rflink_tcp_bridge
 cp .env.example .env
 nano .env  # configure IPs, ports, and logging
 pip install -r requirements.txt
 python multi_rflink_tcp_bridge.py
 ```
 
+---
 
 ## ⚙️ Configuration
 
-Create and customize a `.env` file in the project root. You can copy from a template:
+Create and customize a `.env` file in the project root:
 
 ```bash
 cp .env.example .env
@@ -67,11 +70,12 @@ cp .env.example .env
 | `RFLINK_BRIDGE_IP`       | IP for this bridge to listen on                       | `0.0.0.0`           |
 | `RFLINK_BRIDGE_PORT`     | Port for unified stream                               | `1234`              |
 | `WRITE_LOG_TO_DISK`      | Write logs to file (`true` or `false`)                | `true`              |
-| `LOGGING_LEVEL`          | Logging level (`DEBUG`, `INFO`, `WARN`, `ERROR`)_     | `INFO`              |
+| `LOGGING_LEVEL`          | Logging level (`DEBUG`, `INFO`, `WARN`, `ERROR`)      | `INFO`              |
 | `TELEGRAM_ENABLED`       | Enable Telegram alerts                                | `true`              |
 | `TELEGRAM_BOT_KEY`       | Telegram bot token                                    | `-`                 |
 | `TELEGRAM_BOT_CHAT_ID`   | Target chat ID for alerts                             | `-`                 |
 
+---
 
 ## 🧠 Usage
 
@@ -80,6 +84,7 @@ Once configured, simply run the script:
 ```bash
 python multi_rflink_tcp_bridge.py
 ```
+
 - Starts listener threads for each RFLink
 - Forwards their messages into one bridge stream
 - Supports reconnects and alerting via Telegram
@@ -87,7 +92,47 @@ python multi_rflink_tcp_bridge.py
 
 This bridge gives your automation system a unified, real-time view of your RF environment, regardless of how many RFLinks you deploy or where you place them.
 
-## 🚁 Remote Device Setup
+---
+
+## 🚁 Running as a Service
+
+To run the bridge as a background service that starts automatically on boot:
+
+```bash
+sudo nano /etc/systemd/system/multirflink.service
+```
+
+```ini
+[Unit]
+Description=MultiRFLinkTCPBridge service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/python3 -u /home/pi/github/multi_rflink_tcp_bridge/multi_rflink_tcp_bridge.py
+Restart=always
+RestartSec=5
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable multirflink
+sudo systemctl start multirflink
+sudo systemctl status multirflink
+```
+
+> **Note:** `ExecStartPre=/bin/sleep 10` prevents Errno 99 bind failures on boot by giving the network stack time to fully initialise before the bridge tries to bind its port.
+
+---
+
+## 🔌 Remote Device Setup
 
 For each Raspberry Pi Zero W / 2 W with an RFLink USB device:
 
@@ -98,9 +143,13 @@ sudo apt update
 pip3 install rflink
 ```
 
-2. **Create a proxy systemctl service: **
+2. **Create a proxy systemctl service:**
+
 ```bash
 sudo nano /etc/systemd/system/rflinkproxy.service
+```
+
+```ini
 [Unit]
 Description=RFLink Proxy Service
 After=network.target
@@ -115,11 +164,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
-```
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable rflinkproxy
 sudo systemctl start rflinkproxy
 ```
+
+---
 
 ## 🏠 Integration Examples
 
@@ -131,8 +183,8 @@ sensor:
     host: 192.168.1.50  # IP of your bridge device
     port: 1234          # Port defined in your .env
     name: RFLink Stream
-
 ```
+
 ### 🔁 Node-RED Integration
 
 To integrate the unified RFLink stream into Node-RED:
@@ -145,8 +197,9 @@ To integrate the unified RFLink stream into Node-RED:
 2. **Connect it to a debug or processing node**
    - This will show raw RFLink messages from all linked devices
 
-💡 Tip: You can split or parse the RFLink strings using `function`
+💡 Tip: You can split or parse the RFLink strings using a `function` node.
 
+---
 
 ## 📈 Roadmap
 
@@ -154,6 +207,7 @@ To integrate the unified RFLink stream into Node-RED:
 - [x] Support for multiple frequencies (433MHz and 868MHz)
 - [x] Telegram alert integration for error/reconnects
 - [x] Graceful queue draining on new client connect
+- [x] Systemctl service with boot-time Errno 99 fix
 - [ ] Dockerfile and container support
 - [ ] AsyncIO-based socket backend for better scalability
 
@@ -161,7 +215,7 @@ To integrate the unified RFLink stream into Node-RED:
 
 ## 📜 License
 
-This project is licensed under the MIT License.  
+This project is licensed under the MIT License.
 See the [LICENSE](LICENSE) file for details.
 
 ---
@@ -170,9 +224,6 @@ See the [LICENSE](LICENSE) file for details.
 
 Have feedback or need support?
 
-- Open an [issue](https://github.com/mortylabs/MultiRFLinkTCPBridge/issues)
+- Open an [issue](https://github.com/mortylabs/multi_rflink_tcp_bridge/issues)
 - Start a discussion on the repo
 - Suggest features or improvements via pull requests
-
-
-
