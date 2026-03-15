@@ -6,11 +6,11 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStartPre=/bin/sleep 10
-ExecStart=/usr/bin/python3 -u /home/helga/github/multi_rflink_tcp_bridge/multi_rflink_tcp_bridge.py
+ExecStart=/usr/bin/python3 -u /home/pi/github/multi_rflink_tcp_bridge/multi_rflink_tcp_bridge.py
 Restart=always
 RestartSec=5
-User=helga
-Group=helga
+User=pi
+Group=pi
 
 [Install]
 WantedBy=multi-user.target
