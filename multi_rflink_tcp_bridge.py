@@ -214,7 +214,7 @@ class RFLinkThread(threading.Thread):
                             break
             except Exception:
                 self._handle_disconnect(format_exception())
-                sleep(10)
+                sleep(30)
 
 if __name__ == "__main__":
     logger.info("Starting application...")
