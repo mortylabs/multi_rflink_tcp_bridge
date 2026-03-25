@@ -164,17 +164,21 @@ class RFLinkThread(threading.Thread):
         self.port = int(port)
         self._down = False
         self._last_alert = 0
+        self._alert_sent = False
         self._alert_interval = 7200  # 2 hours
 
     def _handle_disconnect(self, reason):
         if not self._down:
             # First disconnection — start timer, only alert if still down after 120s
             self._down = True
+            self._alert_sent = False
+            self._last_alert = __import__('time').time()
             logger.info(f"{self.__class__.__name__}: {self.ip} disconnected — {reason}, starting 120s reconnect window...")
             def alert_if_no_reconnect(thread, r):
                 sleep(120)
                 if thread._down:
                     thread._last_alert = __import__('time').time()
+                    thread._alert_sent = True
                     log_error_and_notify(f"{thread.__class__.__name__}: {thread.ip} disconnected — {r}")
             threading.Thread(target=alert_if_no_reconnect, args=(self, reason), daemon=True).start()
         else:
@@ -187,9 +191,11 @@ class RFLinkThread(threading.Thread):
     def _handle_reconnect(self):
         if self._down:
             self._down = False
-            if self._last_alert > 0:
+#            if self._last_alert > 0:
+            if self._alert_sent:
                 # Only notify if disconnect alert was actually sent (i.e. down > 120s)
                 log_error_and_notify(f"{self.__class__.__name__}: {self.ip} reconnected successfully ✅")
+                self._alert_sent = False
 
     def run(self):
         while True:
