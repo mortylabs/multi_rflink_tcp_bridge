@@ -1,2 +1,2 @@
 telepot==12.7
-python-dotenv==0.18.0
+python-dotenv==1.2.2
